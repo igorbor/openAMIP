@@ -19,7 +19,11 @@
 #define GPS_POLL_PERIOD  5000
 float curr_lat = 45.4530;
 float curr_long = -73.7308;
- 
+
+/*The reporting rate is the 5th parameter of the c command*/
+/*It can be between 0 to 10 */
+int reporting_rate = 10;
+/*The other parameter of the c command are ignored*/
 
 int main(void)
 {
@@ -255,7 +259,18 @@ AGAIN:
       now = GetTickCount();
       if (((int)now-(int)lasttime) >= GPS_POLL_PERIOD)
       {
-         sprintf(sendbuf, "w 1 %f %f 0\n",curr_lat,curr_long);
+		 /* Changing format for OpenAmip 1.9 */
+         sprintf(sendbuf, "w 1 %0.6f %0.6f 0\n",curr_lat,curr_long);
+         printf("\r\n   TX:%s", sendbuf);
+         if ((send(ClientSocket, sendbuf, strlen(sendbuf), 0)) < 0) {
+            printf("send failed \n");
+            goto AGAIN;
+            return -1;
+         }
+		 /* Adding C command for OpenAmip 1.9 */
+		 /* The first 4 parameters are ignored */
+		 /* Only the reporting rate is used. */
+         sprintf(sendbuf, "c 1.0 1.0 1.0 1.0 %d\n",reporting_rate);
          printf("\r\n   TX:%s", sendbuf);
          if ((send(ClientSocket, sendbuf, strlen(sendbuf), 0)) < 0) {
             printf("send failed \n");
