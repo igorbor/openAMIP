@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <conio.h>
 
 #pragma comment (lib, "Ws2_32.lib")
 
@@ -16,15 +17,31 @@
 #define DEFAULT_PORT "9750"
 
 
-#define GPS_POLL_PERIOD  5000
+#define GPS_POLL_PERIOD  20000
 float curr_lat = 45.4530;
 float curr_long = -73.7308;
+int restart = 0;
 
 /*The reporting rate is the 5th parameter of the c command*/
 /*It can be between 0 to 10 */
-int reporting_rate = 10;
+int reporting_rate = 0;
 /*The other parameter of the c command are ignored*/
 
+void change_lat(void)
+{
+    float tmp1, tmp2;
+    int val = scanf("%f %f", &tmp1, &tmp2);
+    if (val == 2) {
+        curr_lat = tmp1;
+        curr_long = tmp2;
+        printf("new latitude = %f\n", curr_lat);
+        printf("new latitude = %f\n", curr_long);
+        restart = 1;
+    }
+    else {
+        printf("Correct format to update lat and long is \"W f f\"\n");
+    }
+}
 int main(void)
 {
    WSADATA wsaData;
@@ -177,6 +194,9 @@ AGAIN:
    // Receive until the peer shuts down the connection
    do 
    {
+      if (getchar()=='W') {
+           change_lat();
+      }
       assert(rxlen < recvbuflen);
       iResult = recv(ClientSocket, &recvbuf[rxlen], recvbuflen-rxlen, 0);
       if (iResult > 0) {
@@ -257,8 +277,9 @@ AGAIN:
          return -1;
       }
       now = GetTickCount();
-      if (((int)now-(int)lasttime) >= GPS_POLL_PERIOD)
+      if ( (((int)now-(int)lasttime) >= GPS_POLL_PERIOD) || (restart) )
       {
+          restart = 1;
 		 /* Changing format for OpenAmip 1.9 */
          sprintf(sendbuf, "w 1 %0.6f %0.6f 0\n",curr_lat,curr_long);
          printf("\r\n   TX:%s", sendbuf);
