@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <conio.h>
+#include <math.h>
 
 #pragma comment (lib, "Ws2_32.lib")
 
@@ -17,15 +18,51 @@
 #define DEFAULT_PORT "9750"
 
 
-#define GPS_POLL_PERIOD  20000
-float curr_lat = 45.4530;
-float curr_long = -73.7308;
+#define GPS_POLL_PERIOD  5000
+double curr_xyz[3];
+double curr_lat = 45.4530;
+double curr_long = -73.7308;
 int restart = 0;
 
 /*The reporting rate is the 5th parameter of the c command*/
 /*It can be between 0 to 10 */
-int reporting_rate = 0;
+int reporting_rate = 1;
 /*The other parameter of the c command are ignored*/
+
+#define   GPS_EQUATORIAL_RADIUS            6378137
+#define   GPS_EARTH_FLATTERING             (1/298.25722)
+#define   GPS_PI                           (3.14159265)
+#define   GPS_DEG_TO_RAD_FACTOR            (GPS_PI/180)
+#define   GPS_MIN_TO_DEG_IN_DECIMAL        60
+#define   GPS_SEC_TO_MIN_IN_DECIMAL        60
+
+static void convertToXYZFormat
+(
+    double longitude,
+    double lattitude,
+    double altitude,
+    double* xyzCoordinates
+)
+{
+    double denum = 0;
+    double N = 0;
+    double  phi = 0;
+    double  lambda = 0;
+
+    phi = (GPS_DEG_TO_RAD_FACTOR * (double)lattitude);
+    lambda = (GPS_DEG_TO_RAD_FACTOR * (double)longitude);
+
+    /*** Compute the N factor ***/
+    denum = (1 - GPS_EARTH_FLATTERING * (2 - GPS_EARTH_FLATTERING) * (pow(sin(phi), 2)));
+    N = (GPS_EQUATORIAL_RADIUS / (sqrt(denum)));
+
+    xyzCoordinates[0] = (N + altitude) * cos(phi) * cos(lambda);
+    xyzCoordinates[1] = (N + altitude) * cos(phi) * sin(lambda);
+    xyzCoordinates[2] = ((altitude + N * pow((1 - GPS_EARTH_FLATTERING), 2)) * sin(phi));
+
+}
+
+
 
 void change_lat(void)
 {
@@ -35,7 +72,10 @@ void change_lat(void)
         curr_lat = tmp1;
         curr_long = tmp2;
         printf("new latitude = %f\n", curr_lat);
-        printf("new latitude = %f\n", curr_long);
+        printf("new longitude = %f\n", curr_long);
+        convertToXYZFormat(curr_long, curr_lat, 0, curr_xyz);
+        printf("new xyz = %f %f %f\n", curr_xyz[0], curr_xyz[1], curr_xyz[2] );
+
         restart = 1;
     }
     else {
@@ -65,14 +105,6 @@ int main(void)
    int i,rxlen;
    BOOL forced=TRUE;
    char cmd[DEFAULT_BUFLEN];
-
-   UINT8 data_ptr[20]={0x45, 0x00, 0x00, 0x44,
-	0x4f, 0x75, 0x00, 0x00,
-	0x7f, 0x11, 0xfe, 0x16,
-	0xac, 0x10, 0x1a, 0x02,
-	0x0a, 0x0a, 0x1e, 0x01};
-
-
 
    // Initialize Winsock
    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -191,6 +223,10 @@ AGAIN:
    lasttime = GetTickCount();
    rxlen=0;
 
+   printf("Current latitude = %f\n", curr_lat);
+   printf("Current longitude = %f\n", curr_long);
+   convertToXYZFormat( curr_long, curr_lat, 0, curr_xyz);
+   printf("Current xyz = %f %f %f\n", curr_xyz[0], curr_xyz[1], curr_xyz[2]);
    // Receive until the peer shuts down the connection
    do 
    {
@@ -283,6 +319,7 @@ AGAIN:
 		 /* Changing format for OpenAmip 1.9 */
          sprintf(sendbuf, "w 1 %0.6f %0.6f 0\n",curr_lat,curr_long);
          printf("\r\n   TX:%s", sendbuf);
+         printf("\rxyz = %f %f %f\n\r", curr_xyz[0], curr_xyz[1], curr_xyz[2]);
          if ((send(ClientSocket, sendbuf, strlen(sendbuf), 0)) < 0) {
             printf("send failed \n");
             goto AGAIN;
@@ -317,7 +354,7 @@ AGAIN:
          if (HttpSocket != INVALID_SOCKET) {
             char httpRequest[1000];
             int httpLen;
-            char *p,*x,*y;
+            char *p;
             httpLen = recv(HttpSocket, httpRequest, sizeof(httpRequest) - 1, 0);
             if (httpLen > 0) {
                httpRequest[httpLen]=0;
